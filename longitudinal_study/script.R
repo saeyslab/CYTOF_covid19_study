@@ -7,6 +7,7 @@ library(patchwork)
 library(lme4)
 library(lmerTest)
 library(emmeans)
+library(ComplexHeatmap)
 
 source("helperFunctions.R")
 
@@ -25,7 +26,9 @@ fsom_step2_gran_sub <- fsom_step2_gran
 fsom_step2_gran_sub$FlowSOM$map$codes <- 
   fsom_step2_gran_sub$FlowSOM$map$codes[, DIP_channels]
 
-fsom_step2_lymph <- readRDS("model/FlowSOM_step2_lymph.RDS")
+fsom_step2_lymph <- readRDS("model/FlowSOM_step2_nongran.RDS")
+fsom_step2_lymph <- list(FlowSOM = fsom_step2_lymph,
+                         metaclustering = fsom_step2_lymph$metaclustering)
 fsom_step2_lymph_sub <- fsom_step2_lymph
 fsom_step2_lymph_sub$FlowSOM$map$codes <- 
   fsom_step2_lymph_sub$FlowSOM$map$codes[, DIP_channels]
@@ -116,7 +119,7 @@ if(file.exists("RDS/counts.RDS")){
     png(paste0("Results/splitGranulocytes2/",sample,".png"),
         width = 1500, height = 1000)
     plot(ff@exprs[1:min(20000, nrow(ff)), 
-                  GetChannels(ff, c(".*CD66b", ".*CD45"))],
+                  GetChannels(ff, c(".*CD66b", ".*CD45$"), exact = FALSE)],
          pch = ".",
          col = ifelse(GetMetaclusters(fsom_step1_tmp)[1:20000] %in% selected_mc_tmp,
                       "#7bccc4",
@@ -125,9 +128,9 @@ if(file.exists("RDS/counts.RDS")){
          xlab = "CD66b", ylab = "CD45",
          xlim = c(0,8), ylim = c(0,8),
          main = sample)
-    points(metacluster_mfis_tmp[,c("172Yb_CD66b", "89Y_CD45")],
+    points(metacluster_mfis_tmp[,c("CD66b", "CD45")],
            pch = 19,
-           col = ifelse(seq_len(Get_nMetaclusters(fsom_step1)) %in% selected_mc_tmp, 
+           col = ifelse(seq_len(NMetaclusters(fsom_step1)) %in% selected_mc_tmp, 
                         "#2b8cbe", "#fb6a4a"),
            cex =  3)
     abline(v = 3, col = "grey", lwd = 3)
@@ -139,13 +142,13 @@ if(file.exists("RDS/counts.RDS")){
     if (sample %in% only_dip_panel){
       fsom_lymph_tmp <- NewData(fsom_step2_lymph_sub, ff[selection,])
       fsom_lymph_tmp$prettyColnames <- fsom_step2_lymph_sub$FlowSOM$prettyColnames
-      plots_lymph[[sample]] <- PlotFlowSOM(fsom_lymph_tmp,
+      plots_lymph[[sample]] <- PlotStars(fsom_lymph_tmp,
                                            markers = DIP_channels,
                                            title = sample)
     } else {
       fsom_lymph_tmp <- NewData(fsom_step2_lymph, ff[selection,])
       fsom_lymph_tmp$prettyColnames <- fsom_step2_lymph$FlowSOM$prettyColnames
-      plots_lymph[[sample]] <- PlotFlowSOM(fsom_lymph_tmp,
+      plots_lymph[[sample]] <- PlotStars(fsom_lymph_tmp,
                                            title = sample)
     }
     
@@ -169,13 +172,13 @@ if(file.exists("RDS/counts.RDS")){
     if (sample %in% only_dip_panel){
       fsom_gran_tmp <- NewData(fsom_step2_gran_sub, ff[!selection,])
       fsom_gran_tmp$prettyColnames <- fsom_step2_gran_sub$FlowSOM$prettyColnames
-      plots_gran[[sample]] <- PlotFlowSOM(fsom_gran_tmp,
+      plots_gran[[sample]] <- PlotStars(fsom_gran_tmp,
                                           markers = DIP_channels,
                                           title = sample)
     } else {
       fsom_gran_tmp <- NewData(fsom_step2_gran, ff[!selection,])
       fsom_gran_tmp$prettyColnames <- fsom_step2_gran$FlowSOM$prettyColnames
-      plots_gran[[sample]] <- PlotFlowSOM(fsom_gran_tmp,
+      plots_gran[[sample]] <- PlotStars(fsom_gran_tmp,
                                           title = sample)
     }
     
@@ -252,14 +255,14 @@ pctgs <- t(apply(counts, 1, function(x) x / sum(x) * 100))
 
 # Cluster annotation ---------------------------------------------------------------
 
-cluster_annotation <- xlsx::read.xlsx("Metadata/FlowSOM_cluster_annotations_v3.xlsx",
+cluster_annotation <- xlsx::read.xlsx("Metadata/FlowSOM_cluster_annotations_v4.xlsx",
                                       sheetName = "Final version",
                                       check.names = FALSE)
 rownames(cluster_annotation) <- cluster_annotation$cluster
 
-cluster_label <- cluster_annotation[c(paste0("Cl", 1:107), paste0("grCl", 1:100)), "higher level"]
-cluster_label_2 <- cluster_annotation[c(paste0("Cl", 1:107), paste0("grCl", 1:100)), "second_level"]
-cluster_label_final <- cluster_annotation[c(paste0("Cl", 1:107), paste0("grCl", 1:100)), "Final_annotation"]
+cluster_label <- cluster_annotation[c(paste0("Cl", 1:108), paste0("grCl", 1:100)), "higher level"]
+cluster_label_2 <- cluster_annotation[c(paste0("Cl", 1:108), paste0("grCl", 1:100)), "second_level"]
+cluster_label_final <- cluster_annotation[c(paste0("Cl", 1:108), paste0("grCl", 1:100)), "Final_annotation"]
 
 pctgs_highlevel <- t(apply(pctgs, 1, 
                            function(sample_pctgs) tapply(sample_pctgs, 
@@ -274,7 +277,7 @@ pctgs_highlevel_2 <- t(apply(pctgs, 1,
 colnames(pctgs_highlevel_2) <- paste0("FlowSOM_", colnames(pctgs_highlevel_2))
 
 # Leave out duplicated columns (including CD8 NKT / CD8_NKT) and the neutrophil activation split
-cols_level2_to_use <- setdiff(colnames(pctgs_highlevel_2), colnames(pctgs_highlevel))[-c(15,19,20)]
+cols_level2_to_use <- setdiff(colnames(pctgs_highlevel_2), colnames(pctgs_highlevel))[-c(15,20,21)]
 
 pctgs_highlevel <- cbind(pctgs_highlevel[, -c(which(colnames(pctgs_highlevel) == "FlowSOM_undefined"))],
                          "FlowSOM_lymphocytes" = rowSums(pctgs_highlevel[,c("FlowSOM_B cells",
@@ -282,8 +285,7 @@ pctgs_highlevel <- cbind(pctgs_highlevel[, -c(which(colnames(pctgs_highlevel) ==
                                                                             "FlowSOM_CD8 NKT",
                                                                             "FlowSOM_CD8 T cells",
                                                                             "FlowSOM_gdTcells",
-                                                                            "FlowSOM_mDC",
-                                                                            "FlowSOM_monocytes",
+                                                                            "FlowSOM_monocytes and mDC",
                                                                             "FlowSOM_NK cells",
                                                                             "FlowSOM_pDC",
                                                                             "FlowSOM_T cells DN")]),
@@ -300,7 +302,7 @@ comparisons <- list("Lymphocytes" =c("FlowSOM_lymphocytes", "Lymphocytes"),
                     "NK"  = c("FlowSOM_NK cells","NK_Cells"),
                     "pDC" = c("FlowSOM_pDC", "pDC"),
                     "mDC" = c("FlowSOM_mDC", "mDC"),
-                    "Monocytes" = c("FlowSOM_monocytes", "Mono"),
+                    "Monocytes" = c("FlowSOM_classical_monocytes", "Mono"),
                     "Neutrophils" = c("FlowSOM_neutrophil", "Neut"),
                     "Eosinophils" = c("FlowSOM_eosinophils", "Eos"),
                     "CD4_naive" = c("FlowSOM_CD4_naive", "CD4_Naive"),
@@ -317,13 +319,15 @@ for(comp in names(comparisons)){
                           aes_string(x = x,
                                      y = y)) +
     geom_point() +
-    geom_text(aes(label = ifelse(abs(log(x/y)) > 1 & x > 0.1,
-                                 SampleID, "")),
-              #nudge_y = 2,
-              size = 2) +
+    #geom_text(aes(label = ifelse(abs(log(x/y)) > 1 & x > 0.1,
+    #                             SampleID, "")),
+    #          #nudge_y = 2,
+    #          size = 2) +
     geom_abline(aes(intercept = 0, slope =1)) + 
     ggtitle(comp) +
-    theme_minimal()
+    theme_minimal() +
+    xlab("Pathsetter") +
+    ylab("FlowSOM")
 }
 
 ggarrange(plotlist = plots)
@@ -347,8 +351,8 @@ celltypes_order <- c("FlowSOM_neutrophil",
                      "FlowSOM_CD8 NKT",
                      "FlowSOM_NK cells",
                      "FlowSOM_classical_monocytes",
+                     "FlowSOM_classical_monocytes CD163+",
                      "FlowSOM_intermediate_monocytes",
-                     "FlowSOM_intermediate_monocytes_CD163+",
                      "FlowSOM_non-classical_monocytes",
                      "FlowSOM_mDC",
                      "FlowSOM_pDC",
@@ -356,55 +360,174 @@ celltypes_order <- c("FlowSOM_neutrophil",
 
 pctgs_highlevel <- pctgs_highlevel[, celltypes_order]
 
-# Hierarchical clustering of the samples ---------------------------------------
+# tSNE plot --------------------------------------------------------------------
+
+if(file.exists("RDS/tsne.RDS")){
+  tsne <- readRDS("RDS/tsne.RDS")
+  subset_tsne <- readRDS("RDS/subset_tsne.RDS")
+} else { 
+  set.seed(1)
+  subset_tsne <- sample(seq_len(nrow(fsom_step2_lymph$FlowSOM$data)), 25000)
+  tsne <- Rtsne::Rtsne(rbind(fsom_step2_gran$FlowSOM$data[subset_tsne, DIP_channels],
+                             fsom_step2_lymph$FlowSOM$data[subset_tsne, DIP_channels]))
+  saveRDS(subset_tsne, "RDS/subset_tsne.RDS")
+  saveRDS(tsne, "RDS/tsne.RDS")
+}
+clusters_tsne <- c(paste0("grCl", GetClusters(fsom_step2_gran$FlowSOM)[subset_tsne]),
+                   paste0("Cl", GetClusters(fsom_step2_lymph$FlowSOM)[subset_tsne]))
+names(cluster_label) <- c(paste0("Cl", 1:108), paste0("grCl", 1:100))
+names(cluster_label_2) <- c(paste0("Cl", 1:108), paste0("grCl", 1:100))
+level1_tsne <- cluster_label[clusters_tsne]
+level2_tsne <- cluster_label_2[clusters_tsne]
+label_tsne <- rep("Unlabeled", length(level1_tsne))
+for(level1_label in unique(level1_tsne)){
+  if(paste0("FlowSOM_", level1_label) %in% celltypes_order){
+    label_tsne[level1_tsne == level1_label] <- level1_label
+  }
+}
+for(level2_label in unique(level2_tsne)){
+  if(paste0("FlowSOM_", level2_label) %in% celltypes_order){
+    label_tsne[level2_tsne == level2_label] <- level2_label
+  }
+}
+label_tsne <- factor(label_tsne,
+                     levels = c("Unlabeled", gsub("FlowSOM_", "", celltypes_order))) %>% 
+  droplevels()
+
+median_x <- tapply(tsne$Y[,1], label_tsne, median)
+median_y <- tapply(tsne$Y[,2], label_tsne, median)
+
+manual_colors <- c(
+  "Unlabeled" = 'grey',
+  "neutrophil" = "#d9c40b",
+  "eosinophils" = '#ffcc99',
+  "Basophils" = '#993404',
+  "B cells" = '#a6bddb',
+  "gdTcells" = '#ff14ef', 
+  "T cells DN" = "#c288be",
+  "CD4_naive" = '#d1007b',
+  "CD4_effector" = '#e30237',
+  "CD4_Th1" = '#ffb0de',
+  "CD4_Th2" = '#dd3497',
+  "CD4_Th17" = '#9c004b',
+  "CD4_Tfh" = '#d15e00',
+  "CD4_Treg" = '#c849d1',
+  "CD8_naive" ='#88419d',
+  "CD8_activated" ='#bd0af2',
+  "CD8_memory" ='#c79bd4', 
+  "CD8 NKT" = "#1e00ff",
+  "NK cells" = '#000080',
+  "classical_monocytes" = '#2ca25f',
+  "classical_monocytes CD163+" = "#13ffeb",
+  "intermediate_monocytes" = "#ccff00",
+  "non-classical_monocytes" = "#63eb79",
+  "mDC" = "#7adb35",
+  "pDC" = '#eb9800')
+
+ggplot(data.frame(tsne1 = tsne$Y[,1],
+                  tsne2 = tsne$Y[,2],
+                  label = label_tsne)) +
+  scattermore::geom_scattermore(aes(x = tsne1, y = tsne2, color = label)) + 
+  ggrepel::geom_label_repel(aes(x = x, y = y, label = label, color = label),
+                           data = data.frame(x = median_x,
+                                             y = median_y,
+                                             label = names(median_x)),
+                           segment.color = "grey", force = 20, 
+                           segment.size = 0.2, point.padding = 0.5) +
+  theme_minimal() +
+  scale_color_manual(values = manual_colors, guide = FALSE)
+ggsave(paste0("Results/Figures/210112_SuppFig6A_tSNE_populations.pdf"),
+       width = 15, height = 10)
+
+data_to_plot <- data.frame(tsne1 = tsne$Y[,1],
+                           tsne2 = tsne$Y[,2],
+                           rbind(fsom_step2_gran$FlowSOM$data[subset_tsne, DIP_channels],
+                                 fsom_step2_lymph$FlowSOM$data[subset_tsne, DIP_channels]))
+plots <- list()
+for(channel in DIP_channels){
+  marker <- GetMarkers(fsom_step1$FlowSOM, channel)
+  plots[[marker]] <- ggplot(data_to_plot) +
+    scattermore::geom_scattermore(aes_string(x = "tsne1", y = "tsne2", color = channel), pointsize = 2.2) +
+    ggtitle(marker) + 
+    theme_minimal() +
+    scale_color_distiller(palette = "RdYlBu", direction = -1) +
+    theme(axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.title.y=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank()) +
+    labs(color="Expression")
+}
+ggarrange(plotlist = plots, common.legend = TRUE)
+ggsave("Results/Figures/210112_SuppFig6B_tSNE_markers.pdf",
+       width = 15, height = 8)
+
+
+Plot2DScatters(fsom_step2_lymph$FlowSOM,
+               channelpairs = list(GetChannels(fsom_step2_lymph$FlowSOM, c("CD14","CD16$"), exact= FALSE)),
+               clusters = list(which(cluster_label_2 == "classical_monocytes"),
+                               which(cluster_label_2 == "intermediate_monocytes"),
+                               which(cluster_label_2 == "non-classical_monocytes")),
+               plotFile = paste0("Results/Figures/",date,"_monocytes.png"))
+
+channelpair <- GetChannels(fsom_step2_lymph$FlowSOM, c("CD14","CD16$"), exact= FALSE)
+data_to_plot <- data.frame(fsom_step2_lymph$FlowSOM$data[,channelpair])
+p <- ggplot2::ggplot(data = data_to_plot[sample(nrow(data_to_plot), 10000), ], 
+                     ggplot2::aes(x = .data$Er168Di, 
+                                  y = .data$Nd148Di)) +
+  ggplot2::geom_point(colour = "grey", 
+                      size = 0.5) + 
+  ggplot2::geom_point(data = data_to_plot[which(GetClusters(fsom_step2_lymph$FlowSOM) %in% 
+                                            which(cluster_label_2 == "classical_monocytes"))[1:10000],],
+                      colour = manual_colors[["classical_monocytes"]], 
+                      size = 0.5) + 
+  ggplot2::geom_point(data = data_to_plot[which(GetClusters(fsom_step2_lymph$FlowSOM) %in% 
+                                                  which(cluster_label_2 == "intermediate_monocytes"))[1:10000],],
+                      colour = manual_colors[["intermediate_monocytes"]], 
+                      size = 0.5) +  
+  ggplot2::geom_point(data = data_to_plot[which(GetClusters(fsom_step2_lymph$FlowSOM) %in% 
+                                                  which(cluster_label_2 == "non-classical_monocytes"))[1:10000],],
+                      colour = manual_colors[["non-classical_monocytes"]], 
+                      size = 0.5) + 
+  ggplot2::theme_classic() +
+  ggplot2::xlab(GetMarkers(fsom_step2_lymph$FlowSOM, channelpair[1])) +
+  ggplot2::ylab(GetMarkers(fsom_step2_lymph$FlowSOM, channelpair[2])) + 
+  ggplot2::theme(legend.position = "none") +
+  ggtitle("Monocyte subsets")
+
+ggsave(plot = p,
+       filename = paste0("Results/Figures/210111_monocytes_merged.png"))
+# Grouping of the samples ------------------------------------------------------
 
 neutr_lymph_ratio <- pctgs_highlevel[,"FlowSOM_neutrophil"] / 
                        pctgs_highlevel[,"FlowSOM_lymphocytes"]
+names(neutr_lymph_ratio) <- rownames(pctgs_highlevel)
 
-pathsetter <- as.numeric(samples[rownames(pctgs_highlevel), "hier_rank"])
-pathsetter[pathsetter == 5] <- 4
-pathsetter <- factor(pathsetter)
-
-hclustering <- hclust(dist(pctgs_highlevel),
-                      method = "ward.D2")
-# Look at dendrogram to choose number of clusters
-pdf("Results/dendrogram.pdf", width = 20, height = 10)
-plot(hclustering)
-dev.off()
-clus_ward <- cutree(hclustering, k = 4)
-
-# Order clusters by decreasing neutr/lymph ratio
-clus_ward<- factor(as.numeric(factor(rank(-tapply(neutr_lymph_ratio, 
-                                                  clus_ward,
-                                                  mean))[as.character(clus_ward)])))
+clus_ratio <- cut(rank(neutr_lymph_ratio), breaks = 4)
+levels(clus_ratio) <- paste0("R",1:4)
+clus_ratio <- factor(as.character(clus_ratio), levels = paste0("R",4:1))
 
 # Choose clustering method -----------------------------------------------------
 
-clusters <- pathsetter
-clustername <- "Pathsetter"
-
-clusters <- clus_ward
-levels(clusters) <- paste0("BP", levels(clusters))
-clustername <- "FlowSOM"
-
-#clusters <- factor(c(NA, 1, 2, 3, 4)[as.numeric(samples[rownames(pctgs_highlevel), "rank"])])
-#clustername <- "Timepoint"
-
-colors <- c("BP1" = "#2f4c58", 
-            "BP2" = "#309662",
-            "BP3" = "#6395ef", 
-            "BP4" = "#80dae8")
-
+clusters <- clus_ratio
 names(clusters) <- rownames(pctgs_highlevel)
+clustername <- "Ratio"
+
+colors <- c("R4" = "#2f4c58", 
+            "R3" = "#309662",
+            "R2" = "#6395ef", 
+            "R1" = "#80dae8",
+            "HC" = "#000000")
+
 
 # Prepare samples data frame ---------------------------------------------------
-
-samples$BloodProfile <- clusters[rownames(samples)]
 
 
 samples$rank <- factor(samples$rank,
                        levels = unique(samples$rank)[
                          order(as.numeric(gsub("_.*", "", unique(samples$rank))))])
+levels(samples$rank) <- c("Admission ward", "Admission ICU", "Intermediate ICU", "Discharge ICU", "Healthy control")
 
 samples$`resp_supp_1.5` <-  as.numeric(samples[, "resp_supp_1.5"])
 samples$`resp_supp_1.5`[is.na(samples$`resp_supp_1.5`)] <- 0
@@ -419,23 +542,31 @@ samples$days_after_discharge_ICU_overall <- as.numeric(samples$days_after_discha
 samples$age <- as.numeric(samples$age)
 samples$BMI <- as.numeric(samples$BMI)
 
+
+samples$BloodProfile <- clusters[rownames(samples)]
+samples$Neutr_lymph_ratio <- neutr_lymph_ratio[rownames(samples)]
+samples$ColorType <- as.character(samples$BloodProfile)
+samples$ColorType[samples$rank == "Healthy control"] <- "HC"
+samples$ColorType <- factor(samples$ColorType, levels = c(paste0("R",1:4), "HC"))
+
 ## FIGURES ---------------------------------------------------------------------
 
-date <- "200907"
+date <- "210112"
 
 subsets <- list("all" = list(Description = "",
                              IDs = rownames(pctgs_highlevel)),
                 "admission" = list(Description = "Admission samples only",
-                                   IDs = samples[samples$rank == "4_samp_ad_ICU", "SampleID"]),
+                                   IDs = samples[samples$rank == "Admission ICU", "SampleID"]),
                 "discharge" = list(Description = "Discharge samples only",
-                                   IDs = samples[samples$rank == "7_samp_discharge", "SampleID"]),
-                "lowest" = list(Description = "Lowest blood profile per patient",
+                                   IDs = samples[samples$rank == "Discharge ICU", "SampleID"]),
+                "highest" = list(Description = "Highest ratio per patient",
                                 IDs = sapply(unique(samples$Patient), function(x){
                                   patient_samples <-  rownames(samples)[samples$Patient == x]
                                   patient_samples[which.min(clusters[patient_samples])]
                                 })))
 
 # Prepare statistics -----------------------------------------------------------
+
 samples$`IL-8` <- samples$`IL-8_low_sens`
 cytokines_APR <- c("IFN-gamma",
                    "TNF-alfa",
@@ -466,91 +597,171 @@ for(var in cytokines_APR){
          test = "lmm_randomEffect")
 }
 
-# statistics <- data.frame(variable = character(),
-#                          profile1 = numeric(),
-#                          profile2 = numeric(),
-#                          pvalue = numeric(),
-#                          max = numeric(),
-#                          range = numeric())
-# for(evaluation in to_evaluate){
-#   subset <- subsets[[evaluation$subset]]$IDs
-#   statistics <- statistical_tests[[evaluation$test]](
-#     statistics, 
-#     name = evaluation$name,
-#     variable = samples[subset, evaluation$variable],
-#     clusters = samples[subset, "BloodProfile"],
-#     patientID = samples[subset, "PatientID"])
-# }
-# statistics <- finalize_statistics(statistics)
-# statistics_filtered <- filter_statistics(statistics)
-# 
-# plots <- list()
-# for(evaluation in to_evaluate){
-#   print(evaluation$name)
-#   p <- make_plot(title = evaluation$title,
-#                  variable = evaluation$variable,
-#                  subset = evaluation$subset)
-#   p <- add_stats(p, statistics_filtered, evaluation$name)
-#   plots[[evaluation$name]] <- p
-# }
-# 
-# 
-# xlsx::write.xlsx(statistics[,-c(5,6)], 
-#                  "Results/Figures/statistics.xlsx")
+clean_population_name <- function(x){
+  gsub("Basophils", "basophils",
+       gsub("neutrophil", "neutrophils",
+            gsub("_", " ", 
+                 gsub("FlowSOM_", "",x))))
+}
+for(population in colnames(pctgs_highlevel)){
+  samples[[population]] <- pctgs_highlevel[rownames(samples), population]
+  to_evaluate[[length(to_evaluate)+1]] <-
+    list(name = population,
+         title = clean_population_name(population),
+         variable = population,
+         subset = "all",
+         test = "lmm_randomEffect")
+}
+
+to_evaluate_cl <- list(list(name = "Timepoint",
+                            title = "Timepoint of sample",
+                            variable = "rank",
+                            subset = "all",
+                            test = "lmm_randomEffect"),
+                       list(name = "RespSupp",
+                            title = "Respiratory Support",
+                            variable = "resp_supp_1.5",
+                            subset = "all",
+                            test = "lmm_randomEffect"),
+                       list(name = "SOFA",
+                            title = "SOFA score first 24h",
+                            variable = "SOFA_first_24h",
+                            subset = "admission",
+                            test = "lmm"),
+                       list(name = "Revalidation",
+                            title = "Days revalidation after discharge",
+                            variable = "days_after_discharge_ICU_overall",
+                            subset = "discharge",
+                            test = "lmm"))
+
+statistics <- data.frame(variable = character(),
+                         profile1 = numeric(),
+                         profile2 = numeric(),
+                         pvalue = numeric(),
+                         max = numeric(),
+                         range = numeric(),
+                         method = character())
+for(evaluation in c(to_evaluate, to_evaluate_cl)){
+  subset <- subsets[[evaluation$subset]]$IDs
+  statistics <- statistical_tests[[evaluation$test]](
+    statistics, 
+    name = evaluation$name,
+    variable = as.numeric(samples[subset, evaluation$variable]),
+    clusters = samples[subset, "BloodProfile"],
+    patientID = samples[subset, "PatientID"])
+}
+
+resp_stay <- cor.test(as.numeric(samples$max_resp_supp), 
+                      as.numeric(samples$overall_stay_ICU),
+                      method = "spearman")
+statistics <- rbind(statistics, NA)
+statistics[nrow(statistics), "variable"] <- "respiratorysupport_lengthofstay"
+statistics[nrow(statistics), "pvalue"] <-  resp_stay$p.value
+statistics[nrow(statistics), "method"] <- "spearman"
+sofa_cor <- cor.test(as.numeric(samples$SOFA_first_24h), 
+         as.numeric(samples$BloodProfile),
+         method = "spearman")
+statistics <- rbind(statistics, NA)
+statistics[nrow(statistics), "variable"] <- "SOFA"
+statistics[nrow(statistics), "pvalue"] <-  sofa_cor$p.value
+statistics[nrow(statistics), "method"] <- "spearman"
+discharge_cor <- cor.test(as.numeric(samples[subsets$discharge$IDs, "days_after_discharge_ICU_overall"]),
+         as.numeric(samples[subsets$discharge$IDs, "BloodProfile"]),
+         method = "spearman")
+
+statistics <- rbind(statistics, NA)
+statistics[nrow(statistics), "variable"] <- "discharge"
+statistics[nrow(statistics), "pvalue"] <-  discharge_cor$p.value
+statistics[nrow(statistics), "method"] <- "spearman"
+
+statistics <- finalize_statistics(statistics)
+statistics_filtered <- filter_statistics(statistics)
+
+xlsx::write.xlsx(statistics[,-c(5,6)], 
+                 paste0("Results/Figures/",date,"_statistics.xlsx"))
+
+plots <- list()
+for(evaluation in c(to_evaluate, to_evaluate_cl)){
+  print(evaluation$name)
+  p <- make_plot(title = evaluation$title,
+                 variable = evaluation$variable,
+                 subset = evaluation$subset)
+  p <- add_stats(p, statistics_filtered, evaluation$name)
+  plots[[evaluation$name]] <- p
+}
+
 # Fig 2A - Celltype boxplots ----------------------------------------------------------------------
-pctgs_highlevel_long <- tidyr::gather(data.frame(SampleID = samples[rownames(pctgs_highlevel), "SampleID"],
-                                                 Cluster = samples[rownames(pctgs_highlevel), "BloodProfile"],
-                                                 rank = samples[rownames(pctgs_highlevel), "rank"],
-                                                 pctgs_highlevel,
-                                                 check.names = FALSE),
-                                      "Celltype",
-                                      "Pctgs",
-                                      -SampleID, -Cluster, -rank) 
 
-# Clean up names a bit
-pctgs_highlevel_long$Celltype <- factor(gsub("Basophils", "basophils",
-                                             gsub("neutrophil", "neutrophils",
-                                                  gsub("_", " ", 
-                                                       gsub("FlowSOM_", "", pctgs_highlevel_long$Celltype)))),
-                                        levels = gsub("Basophils", "basophils",
-                                                      gsub("neutrophil", "neutrophils",
-                                                           gsub("_", " ", 
-                                                                gsub("FlowSOM_", "", colnames(pctgs_highlevel))))))
+p_celltypes <- ggarrange(plotlist = plots[colnames(pctgs_highlevel)])
 
-
-p_celltypes <- ggplot(pctgs_highlevel_long, aes(x = Cluster,
-                                                y = Pctgs,
-                                                col = Cluster,
-                                                shape =  rank == '11_healthy_control')) +
-  geom_boxplot(outlier.alpha = 0, aes(group = Cluster)) +
-  ggbeeswarm::geom_quasirandom() +
-  facet_wrap(~Celltype, scales = "free") +  
-  guides(col = FALSE, shape = FALSE) +
-  theme_minimal() +
-  xlab("")  + ylab("Percentage") +
-  scale_shape_manual(values = c("TRUE" = 1, 
-                                "FALSE" = 19)) + 
-  scale_color_manual(values = colors)
 
 # Fig 2B - Neutr/Lymph----------------------------------------------------------------------
 
-p_neutr_lymph <- ggplot(cbind(samples[rownames(pctgs_highlevel),],
-                              pctgs_highlevel)[order(clusters),],
+p_neutr_lymph <- ggplot(samples[rownames(pctgs_highlevel),][order(neutr_lymph_ratio, decreasing = TRUE),], 
                         aes(x = 1:123, 
-                            col = clusters[order(clusters)])) +
-  geom_line(aes(y = FlowSOM_lymphocytes, group = 1), lwd = 1) +
-  geom_line(aes(y = FlowSOM_neutrophil, group = 1), lwd = 1) +
+                            col = clusters[order(neutr_lymph_ratio, decreasing = TRUE)]))+
+  geom_line(aes(y = FlowSOM_lymphocytes, group = 1), lwd = 0.5) +
+  geom_line(aes(y = FlowSOM_neutrophil, group = 1), lwd = 0.5) +
+  geom_point(aes(x = 1:123, y = FlowSOM_neutrophil,  col = ColorType, shape = rank == "Healthy control"), size = 1.5) +#alpha = rank == "Healthy control",
+  geom_point(aes(x = 1:123, y = FlowSOM_lymphocytes,  col = ColorType, shape = rank == "Healthy control"), size = 1.5) + #alpha = rank == "Healthy control",, shape = 1
   ggtitle("Neutrophils and Lymphocytes") + 
-  annotate("text", x = 125, y = 56.63363 , label = "Neutrophils", hjust = 0, size = 4) +
-  annotate("text", x = 125, y = 33.634208, label = "Lymphocytes", hjust = 0, size = 4) +
-  guides(col = FALSE) +
-  xlab("Samples ordered by blood profile 1-4") +
+  annotate("text", x = 125, y = min(pctgs_highlevel[,"FlowSOM_neutrophil"]) , label = "Neutrophils", hjust = 0, size = 4) +
+  annotate("text", x = 125, y = max(pctgs_highlevel[,"FlowSOM_lymphocytes"]), label = "Lymphocytes", hjust = 0, size = 4) +
+  guides(col = FALSE, shape = FALSE) +
+  xlab("Samples ordered by decreasing Neutrophil/Lymphocyte ratio") +
   ylab ("Percentage") +
   coord_cartesian(xlim = c(0,125), clip = "off") +
   scale_color_manual(values = colors) +
+  scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 19)) +
   theme_minimal() +
   theme(plot.margin = margin(r = 60))
 
+
+test_kmeans <- kmeans(neutr_lymph_ratio, 4)
+res_kmeans <- factor(test_kmeans$cluster)
+p_kmeans <- ggplot(samples[rownames(pctgs_highlevel),][order(neutr_lymph_ratio, decreasing = TRUE),], 
+                        aes(x = 1:123, 
+                            col = res_kmeans[order(neutr_lymph_ratio, decreasing = TRUE)]))+
+  geom_line(aes(y = FlowSOM_lymphocytes, group = 1), lwd = 0.5) +
+  geom_line(aes(y = FlowSOM_neutrophil, group = 1), lwd = 0.5) +
+  geom_point(aes(x = 1:123, y = FlowSOM_neutrophil, shape = rank == "Healthy control"), size = 1.5) +#alpha = rank == "Healthy control",
+  geom_point(aes(x = 1:123, y = FlowSOM_lymphocytes, shape = rank == "Healthy control"), size = 1.5) + #alpha = rank == "Healthy control",, shape = 1
+  ggtitle("Kmeans") +
+  annotate("text", x = 125, y = min(pctgs_highlevel[,"FlowSOM_neutrophil"]) , label = "Neutrophils", hjust = 0, size = 4) +
+  annotate("text", x = 125, y = max(pctgs_highlevel[,"FlowSOM_lymphocytes"]), label = "Lymphocytes", hjust = 0, size = 4) +
+  guides(col = FALSE, shape = FALSE) +
+  xlab("Samples ordered by decreasing Neutrophil/Lymphocyte ratio") +
+  ylab ("Percentage") +
+  coord_cartesian(xlim = c(0,125), clip = "off") +
+  #scale_color_manual(values = colors) +
+  scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 19)) +
+  theme_minimal() +
+  theme(plot.margin = margin(r = 60))
+
+test_hclust <- hclust(dist(neutr_lymph_ratio))
+res_hclust <- factor(cutree(test_hclust, 4))
+p_hclust <- ggplot(samples[rownames(pctgs_highlevel),][order(neutr_lymph_ratio, decreasing = TRUE),], 
+                   aes(x = 1:123, 
+                       col = res_hclust[order(neutr_lymph_ratio, decreasing = TRUE)]))+
+  geom_line(aes(y = FlowSOM_lymphocytes, group = 1), lwd = 0.5) +
+  geom_line(aes(y = FlowSOM_neutrophil, group = 1), lwd = 0.5) +
+  geom_point(aes(x = 1:123, y = FlowSOM_neutrophil, shape = rank == "Healthy control"), size = 1.5) +#alpha = rank == "Healthy control",
+  geom_point(aes(x = 1:123, y = FlowSOM_lymphocytes, shape = rank == "Healthy control"), size = 1.5) + #alpha = rank == "Healthy control",, shape = 1
+  ggtitle("Hierarchical clustering") +
+  annotate("text", x = 125, y = min(pctgs_highlevel[,"FlowSOM_neutrophil"]) , label = "Neutrophils", hjust = 0, size = 4) +
+  annotate("text", x = 125, y = max(pctgs_highlevel[,"FlowSOM_lymphocytes"]), label = "Lymphocytes", hjust = 0, size = 4) +
+  guides(col = FALSE, shape = FALSE) +
+  xlab("Samples ordered by decreasing Neutrophil/Lymphocyte ratio") +
+  ylab ("Percentage") +
+  coord_cartesian(xlim = c(0,125), clip = "off") +
+  #scale_color_manual(values = colors) +
+  scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 19)) +
+  theme_minimal() +
+  theme(plot.margin = margin(r = 60))
+ggarrange(p_neutr_lymph, p_kmeans, p_hclust, nrow = 1, ncol = 3,
+          labels = "AUTO")
+ggsave(paste0("Results/Figures/",date,"_SuppFig7_alternativeGroupings.pdf"),
+       width = 15, height = 5)
 # Fig 2C - CD4/CD8 ----------------------------------------------------------------------
 
 
@@ -571,9 +782,9 @@ p_CD4CD8 <- ggplot(samples[rownames(pctgs_highlevel),],
                    aes(x = clusters,
                        y = cd4/cd8,
                        col = clusters,
-                       shape = rank == '11_healthy_control')) +
+                       shape = rank == 'Healthy control')) +
   geom_boxplot(outlier.alpha = 0, aes(group = clusters)) +
-  ggbeeswarm::geom_quasirandom() +
+  ggbeeswarm::geom_quasirandom(aes(col = ColorType)) +
   guides(col = FALSE, shape = FALSE) +
   scale_color_manual(values = colors) +
   scale_shape_manual(values = c("TRUE" = 1, 
@@ -587,100 +798,19 @@ p_CD4CD8 <- ggplot(samples[rownames(pctgs_highlevel),],
 
 # Supp Fig 3 - Resp Support / Revalidation / SOFA / Charlson -------------------
 
-to_evaluate_cl <- list(list(name = "Timepoint",
-                         title = "Timepoint of sample",
-                         variable = "rank",
-                         subset = "all",
-                         test = "lmm_randomEffect"),
-                    list(name = "RespSupp",
-                         title = "Respiratory Support",
-                         variable = "resp_supp_1.5",
-                         subset = "all",
-                         test = "lmm_randomEffect"),
-                    list(name = "SOFA",
-                         title = "SOFA score first 24h",
-                         variable = "SOFA_first_24h",
-                         subset = "admission",
-                         test = "fisher"),
-                    list(name = "Revalidation",
-                         title = "Days revalidation after discharge",
-                         variable = "days_after_discharge_ICU_overall",
-                         subset = "discharge",
-                         test = "fisher"))
-                    # list(name = "Comorbidity",
-                    #      title = "Charlson Comorbidity Index",
-                    #      variable = "Charlson_Comorbidity_Index",
-                    #      subset = "admission",
-                    #      test = "fisher"))
-
-
-
-# All figures with statistics ----------------------------------------------------
-
-statistics <- data.frame(variable = character(),
-                         profile1 = numeric(),
-                         profile2 = numeric(),
-                         pvalue = numeric(),
-                         max = numeric(),
-                         range = numeric())
-for(evaluation in to_evaluate){
-  subset <- subsets[[evaluation$subset]]$IDs
-  statistics <- statistical_tests[[evaluation$test]](
-    statistics, 
-    name = evaluation$name,
-    variable = samples[subset, evaluation$variable],
-    clusters = samples[subset, "BloodProfile"],
-    patientID = samples[subset, "PatientID"])
-}
-
-for(evaluation in to_evaluate_cl){
-  subset <- subsets[[evaluation$subset]]$IDs
-  statistics <- statistical_tests[[evaluation$test]](
-    statistics, 
-    name = evaluation$name,
-    variable = as.numeric(samples[subset, evaluation$variable]),
-    clusters = samples[subset, "BloodProfile"],
-    patientID = samples[subset, "PatientID"])
-}
-
-statistics <- finalize_statistics(statistics)
-statistics_filtered <- filter_statistics(statistics)
-
-xlsx::write.xlsx(statistics[,-c(5,6)], 
-                 "Results/Figures/statistics.xlsx")
-
-plots <- list()
-for(evaluation in to_evaluate){
-  print(evaluation$name)
-  p <- make_plot(title = evaluation$title,
-                 variable = evaluation$variable,
-                 subset = evaluation$subset)
-  p <- add_stats(p, statistics_filtered, evaluation$name)
-  plots[[evaluation$name]] <- p
-}
-
-plots_clinic <- list()
-for(evaluation in to_evaluate_cl){
-  print(evaluation$name)
-  p <- make_plot(title = evaluation$title,
-                 variable = evaluation$variable,
-                 subset = evaluation$subset)
-  p <- add_stats(p, statistics_filtered, evaluation$name)
-  plots_clinic[[evaluation$name]] <- p
-}
 
 # Fig 2 ------------------------------------------------------------------------
 
 p_left <- (p_celltypes / ((p_neutr_lymph | plots[["CRP"]] | plots[["Ferritin"]]) + plot_layout(nrow = 1, widths = c(2, 1, 1)))) + plot_layout(ncol = 1, heights = c(3, 1))
 
-p_right <-  plots_clinic[["RespSupp"]] / plots_clinic[["SOFA"]] / plots_clinic[["Timepoint"]] / plots_clinic[["Revalidation"]] 
+p_right <-  plots[["RespSupp"]] / (plots[["SOFA"]] +  coord_trans(x = "reverse")) / plots[["Timepoint"]] / plots[["Revalidation"]] 
 
 
 (p_left | p_right) + plot_layout(ncol = 2, widths = c(3, 1)) + plot_annotation(tag_levels = 'A')
 
 ggsave(paste0("Results/Figures/",
               date, "_", clustername, "_Fig2.pdf"),
-       width = 20, height = 12)
+       width = 20, height = 14)
 
 # Fig 3 A - Cell types Curve fitting -------------------------------------------
 
@@ -698,16 +828,16 @@ for (i in colnames(pctgs_highlevel)){
     function(){
       plot(fm, log = "", 
            col="red",
-           xlim=c(1,4),
-           xt = 1:4,
-           xtlab = paste0("BP", 1:4),
+           xlim=c(1,4),#3), #
+           xt = 1:4,#3, #
+           xtlab = paste0("R", 4:1),#3), #
            xlab = "",
            ylab = "Percentage",
            lwd = 2)
       points(as.numeric(a$BloodProfile) + rnorm(nrow(a), sd = 0.02), 
              a[,i], 
-             col = colors[a$BloodProfile],
-             pch = c(19,1)[1 + (a$rank == "11_healthy_control")])
+             col = colors[as.character(a$ColorType)],
+             pch = c(19,1)[1 + (a$rank == "Healthy control")])
     }
   }) + ggtitle(i) + theme(plot.title = element_text(hjust = 0.5))
   
@@ -717,7 +847,8 @@ for (i in colnames(pctgs_highlevel)){
 }
 cur
 rownames(cur) <- colnames(pctgs_highlevel)
-write.table(cur, file = "Results/Figures/statistics_curvefitting_cytokines_all_07082020_v1.txt", sep = "\t")
+cur$pval_bh <- p.adjust(cur$pval, method = "BH")
+write.table(cur, file = paste0("Results/Figures/",date,"_statistics_curvefitting_cytokines.txt"), sep = "\t")
 
 # pdf("curve_fitting_cytokines_07082020_all.pdf")
 # par(mfrow=c(2,1))
@@ -732,6 +863,7 @@ p_3a <- ggarrange(plotlist = plots_curve[c("FlowSOM_classical_monocytes",
 
 # Fig 3 B - Heatmap cell types -------------------------------------------------
 
+
 celltype_medians <- t(apply(pctgs_highlevel,
                             2,
                             function(x){
@@ -741,49 +873,83 @@ celltype_medians <- t(apply(pctgs_highlevel,
 
 celltype_medians_scaled <- t(apply(celltype_medians,1,function(x) (x-min(x)) / (max(x)-min(x))))
 
-order <- rownames(dplyr::arrange(data.frame(celltype_medians_scaled),#data.frame(means_scaled == 1),
-                                 desc(BP1), desc(BP2), desc(BP3), desc(BP4)))
+order <- rownames(dplyr::arrange(data.frame(celltype_medians_scaled),
+                                 desc(R4), desc(R3), desc(R2), desc(R1)))
 
 celltype_medians_scaled_ordered <- celltype_medians_scaled[order, ]
 
-colors_patients <- circlize::colorRamp2(quantile(patient_overview_scaled, c(0.01, 0.5, 0.99), 
+colors_medians <- circlize::colorRamp2(quantile(celltype_medians_scaled, c(0.01, 0.5, 0.99), 
                                                  na.rm = TRUE), 
                                         c("#e5f5f9", "#99d8c9", "#2ca25f"))
-ht_medians_celltype <- Heatmap(celltype_medians_scaled_ordered,
-                    name = " ",
-                    cluster_rows = FALSE,
-                    cluster_columns = FALSE,
-                    column_labels = c("BP1", "BP2", "BP3", "BP4"),
-                    column_names_side = "top",
-                    column_names_rot = 0,
-                    column_names_centered = TRUE,
-                    column_title = "Relative median abundance \n of the cell populations", 
-                    column_title_side = "bottom", 
-                    column_title_gp = gpar(fontsize = 8), 
-                    col = colors_patients,
-                    heatmap_legend_param =  list(at = c(0, 1), 
-                                                 labels = c("Row min", "Row max")))
+ht_medians_celltype <- ComplexHeatmap::Heatmap(celltype_medians_scaled_ordered,
+                                               name = " ",
+                                               cluster_rows = FALSE,
+                                               cluster_columns = FALSE,
+                                               column_labels = c("R4", "R3", "R2", "R1"),
+                                               column_names_side = "top",
+                                               column_names_rot = 0,
+                                               column_names_centered = TRUE,
+                                               column_title = "Relative median abundance \n of the cell populations", 
+                                               column_title_side = "bottom", 
+                                               column_title_gp = gpar(fontsize = 8), 
+                                               col = colors_medians,
+                                               heatmap_legend_param =  list(at = c(0, 1), 
+                                                                            labels = c("Row min", "Row max")))
 
 p_celltype_heatmap <- draw(ht_medians_celltype,
                            column_title = "Relative cell population abundance",
                            column_title_gp = gpar(fontface = "bold", fontsize = 12))
 
+
+statistics_cell_types <- matrix(NA,
+                                ncol = 3,
+                                nrow = ncol(pctgs_highlevel),
+                                dimnames = list(colnames(pctgs_highlevel),
+                                                c("R4 vs R3", "R3 vs R2", "R2 vs R1")))
+for(population in colnames(pctgs_highlevel)){
+  statistics_subset <- statistics %>% dplyr::filter(population == variable)
+  rownames(statistics_subset) <- paste0(statistics_subset$profile1, " vs ", statistics_subset$profile2)
+  
+  statistics_cell_types[population, ] <- nchar(statistics_subset[colnames(statistics_cell_types), "stars"])
+  
+}
+
+
+ht_statistics <-Heatmap(statistics_cell_types[order,],
+            name = " ",
+            cluster_rows = FALSE,
+            cluster_columns = FALSE,
+            column_names_side = "top",
+            column_names_rot = 0,
+            column_names_centered = TRUE,
+            column_title = "Differences between the NLR groups", 
+            column_title_side = "bottom", 
+            column_title_gp = gpar(fontsize = 8), 
+            col = c("grey", "#fee8c8", "#fdbb84", "#d7301f"),
+            heatmap_legend_param =  list(at = c(0, 1, 2, 3), 
+                                     labels = c("NS", "*", "**", "***")))
+
+p <- draw(ht_statistics)
+ggsave(plot = grid.grabExpr(draw(p)),
+       filename = "Results/Statistics_heatmap.pdf",
+       width = 6, height = 12)
+
 # Fig 3 C - Monocytes ----------------------------------------------------------
 
-library(ComplexHeatmap)
 
 names(cluster_label_2) <- colnames(counts)
 
 clusters_of_interest <- c("Cl21", "Cl11", "Cl44", "Cl31", "Cl3", "Cl12", "Cl43",
                           "Cl33", "Cl34", "Cl13", "Cl63", "Cl41", "Cl24", "Cl32",
-                          "Cl22", "Cl53", "Cl54","Cl23")
+                          "Cl22", "Cl53","Cl23", "Cl1", "Cl2","Cl108")
 
-markers_of_interest <- c("CD45", "HLA-DR", "CD16", "CD11c", "CD38", "CD14", "IL-7Ra", "CD163")
+markers_of_interest <- c("CD45$", "HLA-DR", "CD16$", "CD11c", "CD38", "CD14", "IL-7Ra", "CD163", "CD45RA")
 
 mfis <- GetMFIs(fsom_step2_lymph$FlowSOM)[as.numeric(gsub("Cl", "", clusters_of_interest)), 
-                                          GetChannels(fsom_step2_lymph$FlowSOM, markers_of_interest)]
+                                                GetChannels(fsom_step2_lymph$FlowSOM, markers_of_interest, exact = FALSE)]
 rownames(mfis) <- clusters_of_interest
 colnames(mfis) <- markers_of_interest
+
 
 patient_overview <- t(apply(pctgs[,clusters_of_interest], 2, 
                             function(cluster_pctgs) 
@@ -793,7 +959,7 @@ patient_overview <- t(apply(pctgs[,clusters_of_interest], 2,
 patient_overview_scaled <- t(apply(patient_overview,1,function(x) (x-min(x)) / (max(x)-min(x))))
 
 order <- rownames(dplyr::arrange(data.frame(patient_overview_scaled == 1), 
-                                 desc(BP1), desc(BP2), desc(BP3), desc(BP4)))
+                                 desc(R4), desc(R3), desc(R2), desc(R1))) 
 
 mfis_ordered <- mfis[order, ]
 patient_overview_scaled_ordered <- patient_overview_scaled[order, ]
@@ -807,16 +973,21 @@ ht_patients <- Heatmap(patient_overview_scaled_ordered,
                        cluster_columns = FALSE,
                        row_labels = rep("", nrow(patient_overview_scaled_ordered)),
                        column_names_side = "top",
-                       column_title = "Relative median distribution\n(% of total lymphocytes)", 
+                       column_title = "Relative median distribution\n(% of non-granulocytes)", 
                        column_title_side = "bottom", 
                        column_title_gp = gpar(fontsize = 8), 
                        col = colors_patients,
                        heatmap_legend_param =  list(at = c(0, 1), 
-                                                    labels = c("Row min", "Row max")))
+                                                    labels = c("Row min", "Row max"))#,
+                       #show_heatmap_legend = FALSE
+                       )
 
-colors_mfi <- circlize::colorRamp2(quantile(mfis, seq(0.01, 0.99, length.out = 7), 
+
+#colors_mfi <- circlize::colorRamp2(quantile(mfis, seq(0.01, 0.99, length.out = 7), 
+colors_mfi <- circlize::colorRamp2(quantile(mfis, c(0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.99), 
                                             na.rm = TRUE), 
                                    rev(RColorBrewer::brewer.pal(n = 7, name = "RdBu")))
+colnames(mfis_ordered) <- gsub("\\$", "", colnames(mfis_ordered))
 ht_mfi <- Heatmap(mfis_ordered,
                   cluster_columns = FALSE,
                   name = "Expression",
@@ -826,18 +997,27 @@ ht_mfi <- Heatmap(mfis_ordered,
                   column_title = "Median expression level\n(arcsinh transformed \nwith cofactor 5)", 
                   column_title_side = "bottom", 
                   column_title_gp = gpar(fontsize = 8),
-                  col = colors_mfi)
+                  col = colors_mfi)#,
+                  #show_heatmap_legend = FALSE)
 
-p_monocytes <- draw(`+.AdditiveUnit`(ht_patients, 
-                                     ht_mfi), 
+p_monocytes <- draw(`+.AdditiveUnit`(ht_patients,
+                                     ht_mfi),
                     column_title = "Differential monocyte clusters", 
                     column_title_gp = gpar(fontface = "bold", fontsize = 12), 
                     auto_adjust = FALSE)
 
+ggsave(plot = grid.grabExpr(draw(p_monocytes)),
+       filename = "Results/Figures/Monocytes_heatmap.pdf")
 
 # Fig 3 ------------------------------------------------------------------------
 
-ggarrange(p_3a, grid.grabExpr(draw(p_celltype_heatmap)), grid.grabExpr(draw(p_monocytes)),
+
+ggarrange(p_3a, 
+          grid.grabExpr(draw(p_celltype_heatmap)), 
+          grid.grabExpr(draw(p_monocytes)),
+          #grid.grabExpr(draw(ComplexHeatmap::Legend(at = c(0,1), 
+          #                       labels = c("Row min", "Row max"), 
+          #                       col_fun = colors_patients))),
           labels = "AUTO",
           widths = c(1,1,2),
           ncol = 3)
@@ -845,7 +1025,8 @@ ggarrange(p_3a, grid.grabExpr(draw(p_celltype_heatmap)), grid.grabExpr(draw(p_mo
 
 ggsave(paste0("Results/Figures/",
               date, "_", clustername, "_Fig3.pdf"),
-       width = 20, height = 12)
+       width = 25, height = 12)
+
 
 
 # Fig 4B - Cytokine heatmap ----------------------------------------------------
@@ -881,14 +1062,14 @@ order <- rownames(dplyr::arrange(data.frame(means_scaled),#data.frame(means_scal
 
 means_scaled_ordered <- means_scaled[order, ]
 
-colors_patients <- circlize::colorRamp2(quantile(patient_overview_scaled, c(0.01, 0.5, 0.99), 
+colors_patients <- circlize::colorRamp2(quantile(means_scaled, c(0.01, 0.5, 0.99), 
                                                  na.rm = TRUE), 
                                         c("#e5f5f9", "#99d8c9", "#2ca25f"))
 ht_means <- Heatmap(means_scaled_ordered,
                     name = " ",
                     cluster_rows = FALSE,
                     cluster_columns = FALSE,
-                    column_labels = c("BP1", "BP2", "BP3", "BP4"),
+                    column_labels = c("R4", "R3", "R2", "R1"),
                     column_names_side = "top",
                     column_names_rot = 0,
                     column_names_centered = TRUE,
@@ -900,12 +1081,12 @@ ht_means <- Heatmap(means_scaled_ordered,
                                                  labels = c("Row min", "Row max")))
 
 
-
 # Fig 4A - Cytokines -----------------------------------------------------------
 
 
 p_4a <- gridExtra::grid.arrange(grobs = plots[order],
                                 layout_matrix = matrix(c(1:20), ncol = 5, byrow = TRUE))
+
 
 # Fig 4 ------------------------------------------------------------------------
 
@@ -928,20 +1109,20 @@ ggsave(paste0("Results/Figures/",
 # Supp Fig 1 - Heatmap Bloodprofile --------------------------------------------
 
 
-annotation <- data.frame("BloodProfile" = factor(clusters))
+annotation <- data.frame("Ratio group" = clusters, check.names = FALSE)
 rownames(annotation) <- rownames(pctgs_highlevel)
 
 dev.off()
 pdf(paste0("Results/Figures/",
            date, "_", clustername, "_SuppFig1_Heatmap_Bloodprofiles.pdf"),
     width = 20, height = 8)
-pheatmap::pheatmap(t(pctgs_highlevel[order(clusters), ]),
+pheatmap::pheatmap(t(pctgs_highlevel[order(neutr_lymph_ratio, decreasing = TRUE), ]),
                    gaps_col = cumsum(table(clusters)),
                    cluster_cols = FALSE,
                    cluster_rows = FALSE,
                    breaks = (1:100)^3 / (100)^3*100,
                    annotation_col = annotation,
-                   annotation_colors = list(BloodProfile = colors),
+                   annotation_colors = list("Ratio group" = colors[levels(clusters)]),
                    fontsize_col = 6)
 dev.off()
 
@@ -958,7 +1139,8 @@ abs_counts <- data.frame("LymphocytesCyTOF" =  (((pctgs_highlevel[,"FlowSOM_lymp
                                                   samples[rownames(pctgs_highlevel), "volume"])/10^9,
                          "NeutrophilsClinic" = as.numeric(samples[rownames(pctgs_highlevel), "Neut_clin"]),
                          "clusters" = clusters,
-                         "rank" = samples[rownames(pctgs_highlevel), "rank"])
+                         "rank" = samples[rownames(pctgs_highlevel), "rank"],
+                         "ColorType" = samples[rownames(pctgs_highlevel), "ColorType"])
 abs_counts$RatioCyTOF <- abs_counts$NeutrophilsCyTOF / abs_counts$LymphocytesCyTOF
 abs_counts$RatioClinic <- abs_counts$NeutrophilsClinic / abs_counts$LymphocytesClinic
 
@@ -981,9 +1163,9 @@ for(to_plot in c("LymphocytesCyTOF",
            aes_string(x = "clusters", 
                       y = to_plot,
                       col = "clusters",
-                      shape = "rank == '11_healthy_control'")) +
+                      shape = "rank == 'Healthy control'")) +
     geom_boxplot(outlier.alpha = 0) +
-    ggbeeswarm::geom_quasirandom() +
+    ggbeeswarm::geom_quasirandom(aes(col=ColorType)) +
     ggtitle(gsub("C", " measured by C", to_plot)) + 
     xlab("") + ylab(y_labels[to_plot]) +
     guides(col = FALSE, shape = FALSE) +
@@ -1037,14 +1219,14 @@ for(patient in patients){
   df <- cbind(samples_patient,
               Order = seq_len(nrow(samples_patient)))
   
-  diff <-   diff(as.numeric(df$BloodProfile[df$rank != "2_samp_ad_W"]))
+  diff <-   diff(as.numeric(df$BloodProfile[df$rank != "Admission ward"]))
   
   pattern_type[[patient]] <- ifelse(all(diff == 0),
                                     "No change",
-                                    ifelse(all(diff >= 0),
-                                           "Improving",
-                                           ifelse(all(diff <= 0),
-                                                  "Decreasing",
+                                    ifelse(all(diff <= 0),
+                                           "Increasing",
+                                           ifelse(all(diff >= 0),
+                                                  "Improving",
                                                   "Variable")))
   df$pattern_type <-  pattern_type[[patient]]
   
@@ -1053,7 +1235,7 @@ for(patient in patients){
 
 pattern_type <- unlist(pattern_type)
 pattern_type <- factor(pattern_type,
-                       levels = c("Improving", "No change", "Variable", "Decreasing"))
+                       levels = c("Improving", "No change", "Variable", "Increasing"))
 table(pattern_type)
 
 
@@ -1063,6 +1245,10 @@ rownames(blood_profiles_all) <- gsub(".*\\.", "", rownames(blood_profiles_all))
 blood_profiles_all$PatientID <- factor(as.character(blood_profiles_all$PatientID),
                                        levels = names(sort(pattern_type)))
 
+
+blood_profiles_all$BloodProfile <- factor(as.character(blood_profiles_all$BloodProfile),
+                                          levels = paste0("R",1:4))
+
 p_patientChange <- ggplot(blood_profiles_all,
                           aes(x = as.numeric(Days_from_ad_ICU),
                               y = BloodProfile)) +
@@ -1071,10 +1257,10 @@ p_patientChange <- ggplot(blood_profiles_all,
   theme_minimal() +
   facet_wrap(~ PatientID) +
   xlab("Days since admission to ICU") +
-  scale_color_manual(values = c("2_samp_ad_W" = "#BBBBBB",
-                                "4_samp_ad_ICU" = "#FF0000",
-                                "6_samp_mid" = "#FFA500",
-                                "7_samp_discharge" = "#006400"))
+  scale_color_manual(values = c("Admission ward" = "#BBBBBB",
+                                "Admission ICU" = "#FF0000",
+                                "Intermediate ICU" = "#FFA500",
+                                "Discharge ICU" = "#006400"))
 
 
 pdf(paste0("Results/Figures/",
@@ -1089,24 +1275,21 @@ dev.off()
 to_evaluate <- list(list(name = "Age",
                          title = "Age",
                          variable = "age",
-                         subset = "lowest",
-                         test = "fisher"),
+                         subset = "highest"),
                     list(name = "BMI_lowest",
                          title = "BMI",
                          variable = "BMI",
-                         subset = "lowest",
-                         test = "fisher"),
+                         subset = "highest"),
                     list(name = "BMI_discharge",
                          title = "BMI",
                          variable = "BMI",
-                         subset = "discharge",
-                         test = "fisher"),
+                         subset = "discharge"),
                     list(name = "Comorbidity",
                          title = "Charlson Comorbidity Index",
                          variable = "Charlson_Comorbidity_Index",
-                         subset = "admission",
-                         test = "fisher"))
+                         subset = "admission"))
 
+samples$colorType <- as.character(samples$ColorType)
 supp_4A <- list()
 for(evaluation in to_evaluate){
   print(evaluation$name)
@@ -1118,84 +1301,124 @@ for(evaluation in to_evaluate){
 
 
 # Supp Fig 4 B -----------------------------------------------------------------
+data_supp_4b <- data.frame("Age"  = samples[subsets$highest$IDs, "age"],
+                           "BMI" = samples[subsets$highest$IDs, "BMI"],
+                           "NLR" = samples[subsets$highest$IDs, "Neutr_lymph_ratio"],
+                           "Group" = samples[subsets$highest$IDs, "colorType"])
+data_supp_4b <- data_supp_4b[!is.na(data_supp_4b$Age),]
 
-samples_unique <- 
-  t(sapply(unique(as.character(samples$PatientID)),
-           function(id) c(id,
-                          samples[samples$PatientID == id, "max_resp_supp"][1],
-                          samples[samples$PatientID == id, "BMI"][1],
-                          samples[samples$PatientID == id, "age"][1],
-                          samples[samples$PatientID == id, "gender"][1],
-                          samples[samples$PatientID == id, "SOFA_first_24h"][1],
-                          samples[samples$PatientID == id, "Charlson_Comorbidity_Index"][1]))) %>% 
-  data.frame() %>% 
-  magrittr::set_colnames(c("PatientID", "max_resp_supp", "BMI", 
-                           "age", "gender", "SOFA_first_24h", "Charlson_Comorbidity_Index"))
+cor_nlr_age <- cor(data_supp_4b$Age, data_supp_4b$NLR, use = "complete.obs")
+supp4b_age <- ggplot(data_supp_4b) +
+  geom_point(aes(x = NLR, y = Age, color = Group))+
+  scale_color_manual(values = colors) +
+  theme_minimal() +
+  scale_x_reverse()
 
-for(i in c( "max_resp_supp", "BMI", "SOFA_first_24h", "Charlson_Comorbidity_Index")){
-  samples_unique[[i]] <- as.numeric(samples_unique[[i]])
-}
-for(i in c( "max_resp_supp", "SOFA_first_24h", "Charlson_Comorbidity_Index")){
-  samples_unique[[i]] <- factor(samples_unique[[i]])
-}
 
-samples_unique <- samples_unique[!is.na(samples_unique$max_resp_supp), ]
-levels(samples_unique$max_resp_supp) <- levels(samples$resp_supp_1.5)[2:6]
+supp4b_bmi <- ggplot(data_supp_4b) +
+  geom_point(aes(x = NLR, y = BMI, color = Group))+
+  scale_color_manual(values = colors) +
+  theme_minimal() +
+  scale_x_reverse()
 
-p_BMI_RespSupp <- ggplot(samples_unique,
-                         aes(x = factor(max_resp_supp),
-                             y = BMI)) +
-  geom_boxplot(outlier.alpha = 0) +
-  ggbeeswarm::geom_quasirandom() +
-  guides(col = FALSE) +
-  xlab("Maximal Respiratory Support") + ylab("BMI") +
-  ggtitle("BMI vs Maximal Respiratory Support")+
-  theme_minimal()
+cor_nlr_bmi <- cor(data_supp_4b$BMI, data_supp_4b$NLR, use = "complete.obs")
 
-p_BMI_SOFA <- ggplot(samples_unique,
-                     aes(x = factor(SOFA_first_24h),
-                         y = BMI)) +
-  geom_boxplot(outlier.alpha = 0) +
-  ggbeeswarm::geom_quasirandom() +
-  guides(col = FALSE) +
-  xlab("SOFA first 24h") + ylab("BMI") +
-  ggtitle("BMI vs SOFA")+
-  theme_minimal()
-
-p_Comorbidity_RespSupp <- ggplot(samples_unique,
-                                 aes(x = factor(max_resp_supp),
-                                     y = as.numeric(Charlson_Comorbidity_Index))) +
-  geom_boxplot(outlier.alpha = 0, aes(group = max_resp_supp)) +
-  ggbeeswarm::geom_quasirandom() +
-  guides(col = FALSE) +
-  xlab("Maximal Respiratory Support") + ylab("Charlson Comorbidity Index") +
-  ggtitle("Comorbidity vs Maximal Respiratory Support")+
-  theme_minimal()
+# samples_unique <- 
+#   t(sapply(unique(as.character(samples$PatientID)),
+#            function(id) c(id,
+#                           samples[samples$PatientID == id, "max_resp_supp"][1],
+#                           samples[samples$PatientID == id, "BMI"][1],
+#                           samples[samples$PatientID == id, "age"][1],
+#                           samples[samples$PatientID == id, "gender"][1],
+#                           samples[samples$PatientID == id, "SOFA_first_24h"][1],
+#                           samples[samples$PatientID == id, "Charlson_Comorbidity_Index"][1]))) %>% 
+#   data.frame() %>% 
+#   magrittr::set_colnames(c("PatientID", "max_resp_supp", "BMI", 
+#                            "age", "gender", "SOFA_first_24h", "Charlson_Comorbidity_Index"))
+# 
+# for(i in c( "max_resp_supp", "BMI", "SOFA_first_24h", "Charlson_Comorbidity_Index")){
+#   samples_unique[[i]] <- as.numeric(samples_unique[[i]])
+# }
+# for(i in c( "max_resp_supp", "SOFA_first_24h", "Charlson_Comorbidity_Index")){
+#   samples_unique[[i]] <- factor(samples_unique[[i]])
+# }
+# 
+# samples_unique <- samples_unique[!is.na(samples_unique$max_resp_supp), ]
+# levels(samples_unique$max_resp_supp) <- levels(samples$resp_supp_1.5)[2:6]
+# 
+# p_BMI_RespSupp <- ggplot(samples_unique,
+#                          aes(x = factor(max_resp_supp),
+#                              y = BMI)) +
+#   geom_boxplot(outlier.alpha = 0) +
+#   ggbeeswarm::geom_quasirandom() +
+#   guides(col = FALSE) +
+#   xlab("Maximal Respiratory Support") + ylab("BMI") +
+#   ggtitle("BMI vs Maximal Respiratory Support")+
+#   theme_minimal()
+# 
+# p_BMI_SOFA <- ggplot(samples_unique,
+#                      aes(x = factor(SOFA_first_24h),
+#                          y = BMI)) +
+#   geom_boxplot(outlier.alpha = 0) +
+#   ggbeeswarm::geom_quasirandom() +
+#   guides(col = FALSE) +
+#   xlab("SOFA first 24h") + ylab("BMI") +
+#   ggtitle("BMI vs SOFA")+
+#   theme_minimal()
+# 
+# p_Comorbidity_RespSupp <- ggplot(samples_unique,
+#                                  aes(x = factor(max_resp_supp),
+#                                      y = as.numeric(Charlson_Comorbidity_Index))) +
+#   geom_boxplot(outlier.alpha = 0, aes(group = max_resp_supp)) +
+#   ggbeeswarm::geom_quasirandom() +
+#   guides(col = FALSE) +
+#   xlab("Maximal Respiratory Support") + ylab("Charlson Comorbidity Index") +
+#   ggtitle("Comorbidity vs Maximal Respiratory Support")+
+#   theme_minimal()
 
 
 # Supp Fig 4 C - Corticosteroids ------------------------------------------------------------
+
+samples$`Anti-IL-1`[samples$`Anti-IL-1` == 1] <- "Anti-IL-1"
+samples$`Anti-IL-1`[samples$`Anti-IL-1` == 0] <- ""
+samples$`Anti-IL-6`[samples$`Anti-IL-6` == 1] <- "Anti-IL-6"
+samples$`Anti-IL-6`[samples$`Anti-IL-6` == 0] <- ""
+
+samples$ILtreatment <- ifelse(samples$`Anti-IL-1` == "Anti-IL-1", 
+                              "Anti-IL-1",
+                              ifelse(samples$`Anti-IL-6` == "Anti-IL-6",
+                                     "Anti-IL-6",
+                                     "No IL-1 or IL-6 treatment"))
 
 p_steroids_discharge <- 
   ggplot(samples[subsets$discharge$IDs,],
          aes(x = ifelse(CS == "1", 
                         "Treated with corticosteroids", 
                         "No corticosteroids"),
-             y = BloodProfile)) +
+             y = factor(as.character(BloodProfile), 
+                        levels = paste0("R",1:4)))) +
   geom_boxplot(outlier.alpha = 0,
                aes(group =  CS)) +
-  ggbeeswarm::geom_quasirandom(aes(col = BloodProfile), 
-                               size = 2) +
+  ggbeeswarm::geom_quasirandom(aes(col = BloodProfile,
+                                   shape = ILtreatment), 
+                               size = 3) +
   ggtitle("Corticosteroid treatment") + 
   xlab("Discharge samples only") + ylab("") +
   guides(col = FALSE) +
   scale_color_manual(values = colors) +
+  scale_shape_manual(values = c("No IL-1 or IL-6 treatment" = 19,
+                                "Anti-IL-1" = 10,
+                                "Anti-IL-6" = 13),
+                     name = "Additional treatment") +
   theme_minimal()
 
 
 # Supp Fig 4 -------------------------------------------------------------------
 
+# ((( supp_4A$BMI_lowest | supp_4A$Age) / 
+#    (p_Comorbidity_RespSupp | supp_4A$Comorbidity))| p_steroids_discharge )  + 
 ((( supp_4A$BMI_lowest | supp_4A$Age) / 
-   (p_Comorbidity_RespSupp | supp_4A$Comorbidity))| p_steroids_discharge )  + 
+    (supp4b_bmi | supp4b_age))| p_steroids_discharge )  + 
   plot_layout(ncol = 2, widths = c(3, 1)) +
   plot_annotation(tag_levels = 'A')
 
@@ -1208,6 +1431,7 @@ ggsave(paste0("Results/Figures/",
 
 mfis_lymph <- GetMFIs(fsom_step2_lymph, colsUsed = TRUE, prettyColnames = TRUE)
 rownames(mfis_lymph) <- paste0("Cl", rownames(mfis_lymph))
+colnames(mfis_lymph) <- gsub(".*_(.*) <.*", "\\1", colnames(mfis_lymph))
 
 mfis_gran <- GetMFIs(fsom_step2_gran, colsUsed = TRUE, prettyColnames = TRUE)
 rownames(mfis_gran) <- paste0("grCl", rownames(mfis_gran))
@@ -1218,7 +1442,7 @@ colors_mfi <- circlize::colorRamp2(c(0:6),
 #                                             na.rm = TRUE), 
                                    rev(RColorBrewer::brewer.pal(n = 7, name = "RdBu")))
 
-pdf("Results/Figures/200826_FlowSOM_SuppFig5_Heatmaps.pdf",
+pdf(paste0("Results/Figures/",date,"_",clustername,"_SuppFig5_Heatmaps.pdf"),
     width = 12, height = 20)
 Heatmap(mfis_gran,
         cluster_columns = FALSE,
@@ -1243,6 +1467,164 @@ Heatmap(mfis_lymph,
         col = colors_mfi)
 dev.off()
 
+
+## Export data table
+
+data_export <- data.frame(PatientID = rownames(pctgs_highlevel),
+                          pctgs_highlevel, 
+                          samples[rownames(pctgs_highlevel), cytokines_APR],
+                          Group = samples[rownames(pctgs_highlevel), "BloodProfile"],
+                          check.names = FALSE)
+
+writexl::write_xlsx(data_export,
+                    paste0(date,"_data_export.xlsx"))
+
+
+###
+ggplot(data.frame("Maximal respiratory support" = samples$max_resp_supp[samples$rank != "11_healthy_control"],
+                  "Length of stay ICU" = as.numeric(samples$overall_stay_ICU[samples$rank != "11_healthy_control"]),
+                  check.names = FALSE)) +
+  geom_point(aes(x = `Maximal respiratory support`, 
+                 y = `Length of stay ICU`)) + 
+  theme_minimal()
+ggsave("Results/Figures/maxRespSupp_vs_overallStayICU.pdf")
+
+###
+
+
+mfis <- readRDS("RDS/mfis.RDS")
+mfis_hladr  <- mfis[,grep("HLA-DR", colnames(mfis))]
+colnames(mfis_hladr) <- gsub(" .*", "", colnames(mfis_hladr))
+
+mfis_hladr <- tidyr::pivot_longer(data.frame(Patient = rownames(mfis_hladr),
+                                             mfis_hladr), 
+                                  names_to = "Cluster", 
+                                  values_to = "MMI",
+                                  cols = colnames(mfis_hladr))
+mfis_hladr$Celltype <- cluster_label_2[mfis_hladr$Cluster]
+mfis_hladr$BloodProfile <- samples[mfis_hladr$Patient, "BloodProfile"]
+
+
+ggplot(mfis_hladr %>% 
+         dplyr::filter(Celltype %in% c("classical_monocytes", "intermediate_monocytes", "non-classical_monocytes", "mDC", "pDC"))) +
+  geom_boxplot(aes(x = BloodProfile, y = MMI), outlier.size = 0) +
+  ggbeeswarm::geom_quasirandom(aes(x = BloodProfile, y = MMI, color = Celltype)) +
+  facet_wrap("~ Cluster", nrow = 1) +
+  scale_color_manual(values = manual_colors) + 
+  theme_minimal() +
+  xlab("Immune type")
+
+ggsave("Results/Figures/210112_HLADR_MMIs.pdf",
+       width = 20, height = 8)
+
+mfis_hladr <- mfis_hladr %>%
+  dplyr::group_by(Celltype, Patient, BloodProfile) %>%
+  dplyr::summarise(MMI = median(MMI))
+
+ggplot(mfis_hladr %>% 
+         dplyr::filter(Celltype %in% c("classical_monocytes", "intermediate_monocytes", "non-classical_monocytes", "mDC", "pDC"))) +
+  geom_boxplot(aes(x = BloodProfile, y = MMI), outlier.size = 0) +
+  ggbeeswarm::geom_quasirandom(aes(x = BloodProfile, y = MMI, color = Celltype)) +
+  facet_wrap("~ Celltype", nrow = 1) +
+  scale_color_manual(values = manual_colors) + 
+  theme_minimal() +
+  xlab("Immune type")
+
+
+ggsave("Results/Figures/210112_HLADR_median_of_MMIs.pdf",
+       width = 15, height = 8)
+
+
+plot(pctgs[,c("Cl11","grCl63")], xlim = c(0,1), ylim = c(0,1))
+abline(a = 0, b = 1, col = "lightgrey")
+# tSNE test -------------------------------
+
+data_tsne <- data.frame(Ratio = samples[rownames(pctgs_highlevel),"BloodProfile"],
+                        PatientID = samples[rownames(pctgs_highlevel),"PatientID"],
+                        pctgs_highlevel, 
+                        apply(samples[rownames(pctgs_highlevel),cytokines_APR], 2, as.numeric),
+                        check.names = FALSE)
+rownames(data_tsne) <- rownames(pctgs_highlevel)
+data_tsne  <- na.omit(data_tsne)
+set.seed(1)
+res_tsne <- Rtsne::Rtsne(scale(data_tsne[,-c(1,2)]), perplexity = 10)
+data_tsne$tsne1 <- res_tsne$Y[,1]
+data_tsne$tsne2 <- res_tsne$Y[,2]
+
+tsne_plots <- list()
+for(feature in colnames(data_tsne)[c(1,2)]){
+  tsne_plots[[feature]] <- ggplot(data_tsne) +
+    geom_point(aes_string(x = "tsne1", y = "tsne2", col = paste0("`",feature,"`"))) +
+    #theme_minimal() +
+    ggtitle(feature)
+}
+for(feature in colnames(data_tsne)[-c(1,2)]){
+  tsne_plots[[feature]] <- ggplot(data_tsne) +
+    geom_point(aes_string(x = "tsne1", y = "tsne2", col = paste0("`",feature,"`"))) +
+    #theme_minimal() +
+    scale_color_distiller(palette = "RdYlBu") +
+    ggtitle(feature)
+}
+
+pdf("Results/tsne_test.pdf", width = 20, height = 10)
+ggarrange(plotlist = tsne_plots, ncol = 3, nrow = 2)
+dev.off()
+
+
+tsne_plots <- list()
+for(feature in colnames(data_tsne)[c(1,2)]){
+  tsne_plots[[feature]] <- ggplot(data_tsne) +
+    geom_point(aes_string(x = "FlowSOM_neutrophil", y = "FlowSOM_lymphocytes", col = paste0("`",feature,"`"))) +
+    #theme_minimal() +
+    ggtitle(feature)
+}
+for(feature in colnames(data_tsne)[-c(1,2)]){
+  tsne_plots[[feature]] <- ggplot(data_tsne) +
+    geom_point(aes_string(x = "FlowSOM_neutrophil", y = "FlowSOM_lymphocytes", col = paste0("`",feature,"`"))) +
+    #theme_minimal() +
+    scale_color_distiller(palette = "RdYlBu") +
+    ggtitle(feature)
+}
+
+pdf("Results/ratio_test.pdf", width = 20, height = 10)
+ggarrange(plotlist = tsne_plots, ncol = 3, nrow = 2)
+dev.off()
+
+
+# SOFA score -----------------
+
+sofa_test <- data.frame(SOFA = samples$SOFA_first_24h,
+                        RatioGroup = samples$BloodProfile,
+                        PatientID = samples$PatientID,
+                        Timepoint = samples$rank,
+                        Days_from_ad_ICU = as.numeric(samples$Days_from_ad_ICU),
+                        Ratio = samples$Neutr_lymph_ratio)
+
+
+ggplot(sofa_test) +
+  geom_point(aes(x = Days_from_ad_ICU , y = Ratio, col = RatioGroup,
+                 size = Timepoint, shape = Timepoint))  +
+  geom_line(aes(x = Days_from_ad_ICU, y = Ratio, group = PatientID)) +
+  facet_wrap(~ SOFA) +
+  scale_size_manual(values = c("Admission ICU" = 2,
+                               "Admission ward" = 1,
+                               "Intermediate ICU" = 1,
+                               "Discharge ICU" = 1,
+                               "Healthy control" = 1)) +
+  ggtitle("SOFA score groups") +
+  scale_color_manual(values = colors)
+ggsave("Results/Sofa_exploration.pdf",
+       width = 10, height = 6)
+
+###
+
+Plot2DScatters(fsom_step2_lymph$FlowSOM, list(c("CD11c", "CD38"),
+                                              c("CD14", "CD16"),
+                                              c("CD14", "IL-3R"),
+                                              c("CD14", "CD45RA")),
+               clusters = list(c(11,53,63,41,32,54,31,13,24,22,21,44,3,12,43,33,34,23,1,2)), 
+               plotFile = "Monocyte_scatters_all.png",
+               maxPoints = 50000)
 
 # ___Old plots___---------------------------------------------------------------
 

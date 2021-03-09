@@ -180,73 +180,73 @@ plot_quantiles <- function(quantiles){
 
 
 # Stats ------------------------------------------------------------------------
+# 
+# add_fisher <- function(statistics,
+#                        name,
+#                        variable,
+#                        clusters,
+#                        patientID){
+#   for(p1 in 1:3){
+#     for(p2 in (p1+1):4){
+#       fit <- fisher.test(variable[clusters %in% paste0("BP", c(p1,p2))], 
+#                          clusters[clusters %in% paste0("BP", c(p1,p2))])
+#       
+#       statistics <- rbind(statistics,
+#                           data.frame(variable = name,
+#                                      profile1 = paste0("BP", p1),
+#                                      profile2 = paste0("BP", p2),
+#                                      pvalue = fit$p.value,
+#                                      max = max(as.numeric(variable), na.rm = TRUE),
+#                                      range = diff(range(as.numeric(variable), na.rm = TRUE))))
+#       
+#     }
+#   }
+#   return(statistics)
+# }
 
-add_fisher <- function(statistics,
-                       name,
-                       variable,
-                       clusters,
-                       patientID){
-  for(p1 in 1:3){
-    for(p2 in (p1+1):4){
-      fit <- fisher.test(variable[clusters %in% paste0("BP", c(p1,p2))], 
-                         clusters[clusters %in% paste0("BP", c(p1,p2))])
-      
-      statistics <- rbind(statistics,
-                          data.frame(variable = name,
-                                     profile1 = paste0("BP", p1),
-                                     profile2 = paste0("BP", p2),
-                                     pvalue = fit$p.value,
-                                     max = max(as.numeric(variable), na.rm = TRUE),
-                                     range = diff(range(as.numeric(variable), na.rm = TRUE))))
-      
-    }
-  }
-  return(statistics)
-}
-
-library(brms)
-library(tidybayes)
-add_brm <- function(statistics, 
-                                 name,
-                                 variable,
-                                 clusters,
-                                 patientID){
-  
-  data <- data.frame(Variable = variable,
-                     BloodProfile = clusters,
-                     PatientID = patientID)
-  
-  model <- brm(Variable ~ BloodProfile + (1|PatientID), family = "categorical",
-                 data = data, prior = c(set_prior("normal (0, 8)")), 
-               control = list(adapt_delta = 0.99))
-  
-  
-  
-  model <- brm(Variable ~ BloodProfile + (1|PatientID), 
-               family = "categorical",
-               data = data, 
-               prior = set_prior("normal (0, 1)"))
-  # Problem with post hoc test
-  
-  emmeans <- emmeans(model, pairwise ~ BloodProfile, 
-                     adjust = "none", dpar = "mu4sampadICU") 
-  cont <- contrast(emmeans)
-  
-  cont_posterior <- gather_emmeans_draws(cont)
-  
-  
-  emmeans <- emmeans(model, pairwise ~ BloodProfile, adjust = "none", dpar = "muHFNC") 
-  # 
-  # pdiff <- data.frame(emmeans$`pairwise differences of BloodProfile`)
-  # statistics <- rbind(statistics,
-  #                     data.frame(variable = name,
-  #                                profile1 =  stringr::str_sub(pdiff[,"contrast"], 1, 3),
-  #                                profile2 = stringr::str_sub(pdiff[,"contrast"], 7, 9),
-  #                                pvalue = pdiff[,"p.value"],
-  #                                max = max(variable, na.rm = TRUE),
-  #                                range = diff(range(variable, na.rm = TRUE))))
-  # return(statistics)
-}
+# library(brms)
+# library(tidybayes)
+# add_brm <- function(statistics, 
+#                                  name,
+#                                  variable,
+#                                  clusters,
+#                                  patientID){
+#   
+#   data <- data.frame(Variable = variable,
+#                      BloodProfile = clusters,
+#                      PatientID = patientID)
+#   
+#   model <- brm(Variable ~ BloodProfile + (1|PatientID), family = "categorical",
+#                  data = data, prior = c(set_prior("normal (0, 8)")), 
+#                control = list(adapt_delta = 0.99))
+#   
+#   
+#   
+#   model <- brm(Variable ~ BloodProfile + (1|PatientID), 
+#                family = "categorical",
+#                data = data, 
+#                prior = set_prior("normal (0, 1)"))
+#   # Problem with post hoc test
+#   
+#   emmeans <- emmeans(model, pairwise ~ BloodProfile, 
+#                      adjust = "none", dpar = "mu4sampadICU") 
+#   cont <- contrast(emmeans)
+#   
+#   cont_posterior <- gather_emmeans_draws(cont)
+#   
+#   
+#   emmeans <- emmeans(model, pairwise ~ BloodProfile, adjust = "none", dpar = "muHFNC") 
+#   # 
+#   # pdiff <- data.frame(emmeans$`pairwise differences of BloodProfile`)
+#   # statistics <- rbind(statistics,
+#   #                     data.frame(variable = name,
+#   #                                profile1 =  stringr::str_sub(pdiff[,"contrast"], 1, 3),
+#   #                                profile2 = stringr::str_sub(pdiff[,"contrast"], 7, 9),
+#   #                                pvalue = pdiff[,"p.value"],
+#   #                                max = max(variable, na.rm = TRUE),
+#   #                                range = diff(range(variable, na.rm = TRUE))))
+#   # return(statistics)
+# }
 
 add_lmm <- function(statistics,
                     name,
@@ -262,11 +262,12 @@ add_lmm <- function(statistics,
   pdiff <- data.frame(emmeans$`pairwise differences of BloodProfile`)
   statistics <- rbind(statistics,
                       data.frame(variable = name,
-                                 profile1 =  stringr::str_sub(pdiff[,"contrast"], 1, 3),
-                                 profile2 = stringr::str_sub(pdiff[,"contrast"], 7, 9),
+                                 profile1 =  stringr::str_sub(pdiff[,"X1"], 1, 2),
+                                 profile2 = stringr::str_sub(pdiff[,"X1"], 6, 7),
                                  pvalue = pdiff[,"p.value"],
                                  max = max(variable, na.rm = TRUE),
-                                 range = diff(range(variable, na.rm = TRUE))))
+                                 range = diff(range(variable, na.rm = TRUE)),
+                                 method = "lmm"))
   return(statistics)
 }
 
@@ -287,11 +288,12 @@ add_lmm_randomEffect <- function(statistics,
   pdiff <- data.frame(emmeans$`pairwise differences of BloodProfile`)
   statistics <- rbind(statistics,
                       data.frame(variable = name,
-                                 profile1 =  stringr::str_sub(pdiff[,"contrast"], 1, 3),
-                                 profile2 = stringr::str_sub(pdiff[,"contrast"], 7, 9),
+                                 profile1 =  stringr::str_sub(pdiff[,"X1"], 1, 2),
+                                 profile2 = stringr::str_sub(pdiff[,"X1"], 6, 7),
                                  pvalue = pdiff[,"p.value"],
                                  max = max(variable, na.rm = TRUE),
-                                 range = diff(range(variable, na.rm = TRUE))))
+                                 range = diff(range(variable, na.rm = TRUE)),
+                                 method = "lmm_randomEffect"))
   return(statistics)
 }
 
@@ -318,10 +320,8 @@ add_lmm_randomEffect_means <- function(means,
                             profile4 = emmeans[4, "emmean"]))
   return(means)
 }
-statistical_tests <- list("fisher" = add_fisher,
-                          "lmm" = add_lmm,
-                          "lmm_randomEffect" = add_lmm_randomEffect,
-                          "brm" = add_brm)
+statistical_tests <- list("lmm" = add_lmm,
+                          "lmm_randomEffect" = add_lmm_randomEffect)
 
 
 finalize_statistics <- function(statistics){
@@ -362,8 +362,8 @@ make_plot <- function(title,
                  outlier.alpha = 0) +
     ggbeeswarm::geom_quasirandom(aes_string(x = "BloodProfile",
                                             y = paste0("`", variable, "`"),
-                                            col = "BloodProfile",
-                                            shape = "rank == '11_healthy_control'"))+
+                                            col = "ColorType",
+                                            shape = "rank == 'Healthy control'"))+
                                  #size = 3) +
     guides(col = FALSE, shape = FALSE) +
     ggtitle(title) +
@@ -382,7 +382,7 @@ add_stats <- function(p, statistics, stat_name){
       geom_segment(aes(x = profile1, xend = profile2,
                        y = y,  yend = y), 
                    data = statistics[statistics$variable == stat_name, , drop = FALSE]) +
-      geom_text(aes(x = (as.numeric(gsub("BP", "", profile1))+as.numeric(gsub("BP", "", profile2)))/2,
+      geom_text(aes(x = ((5-as.numeric(gsub("R", "", profile1)))+(5-as.numeric(gsub("R", "", profile2))))/2,
                     y = 1.01*y,
                     label = stars),
                 data = statistics[statistics$variable == stat_name, , drop = FALSE]) 
